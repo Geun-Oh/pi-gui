@@ -85,3 +85,60 @@
 .hljs-subst {
   color: var(--hljs-subst);
 }
+
+/* Classes emitted by the YAML, HCL, markup, stylesheet, config and diff grammars.
+   They reuse the palette above so every theme preset colours them too. */
+.hljs-attribute,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--hljs-attr);
+}
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--hljs-literal);
+}
+.hljs-section {
+  color: var(--hljs-title);
+  font-weight: 600;
+}
+.hljs-name,
+.hljs-selector-tag,
+.hljs-doctag,
+.hljs-meta-keyword {
+  color: var(--hljs-keyword);
+}
+.hljs-tag {
+  color: var(--hljs-subst);
+}
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--hljs-class);
+}
+.hljs-template-variable,
+.hljs-template-tag {
+  color: var(--hljs-variable);
+}
+.hljs-meta-string,
+.hljs-code {
+  color: var(--hljs-string);
+}
+.hljs-link {
+  color: var(--hljs-string);
+  text-decoration: underline;
+}
+.hljs-quote {
+  color: var(--hljs-comment);
+  font-style: italic;
+}
+.hljs-addition {
+  color: var(--hljs-regexp);
+}
+.hljs-deletion {
+  color: var(--hljs-keyword);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}

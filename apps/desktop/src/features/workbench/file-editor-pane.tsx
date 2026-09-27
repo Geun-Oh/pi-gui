@@ -5,9 +5,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CloseIcon, CopyIcon, WorktreeIcon } from "../../ui/icons";
 import {
-  MAX_HIGHLIGHTED_LINES,
+  MAX_HIGHLIGHTED_FILE_LINES,
   extensionToLanguage,
-  highlightLine,
+  highlightLines,
   type HighlightLine,
 } from "../../ui/syntax-highlight";
 import {
@@ -293,8 +293,14 @@ function SourceView({
   readonly lineMark: FileLineMark | null;
 }) {
   const language = extensionToLanguage(path);
-  const lines = content.split("\n");
-  const highlightActive = language !== undefined && lines.length <= MAX_HIGHLIGHTED_LINES;
+  const lines = useMemo(() => content.split("\n"), [content]);
+  const highlighted = useMemo(
+    () =>
+      language !== undefined && lines.length <= MAX_HIGHLIGHTED_FILE_LINES
+        ? highlightLines(content, language)
+        : undefined,
+    [content, language, lines.length],
+  );
   const firstMarkedRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const line = firstMarkedRef.current;
@@ -305,12 +311,14 @@ function SourceView({
   return (
     <pre
       className="file-editor__source file-workbench__preview"
+      data-language={highlighted ? language : undefined}
       data-testid="file-workbench-preview"
     >
       {lines.map((line, index) => {
         const lineNumber = index + 1;
         const marked =
           lineMark !== null && lineNumber >= lineMark.start && lineNumber <= lineMark.end;
+        const tokens = highlighted?.[index];
         return (
           <div
             className={marked ? "file-editor__line file-editor__line--marked" : "file-editor__line"}
@@ -319,7 +327,7 @@ function SourceView({
             key={lineNumber}
             ref={marked && lineNumber === lineMark?.start ? firstMarkedRef : undefined}
           >
-            {highlightActive ? <HighlightedLine content={line} language={language} /> : line || " "}
+            {tokens?.length ? renderTokens(tokens) : line || " "}
           </div>
         );
       })}
@@ -343,17 +351,6 @@ function scrollIntoContainer(element: HTMLElement, containerSelector: string): v
     container.clientHeight / 2 +
     elementRect.height / 2;
   container.scrollTop = Math.max(0, top);
-}
-
-function HighlightedLine({
-  content,
-  language,
-}: {
-  readonly content: string;
-  readonly language: string;
-}) {
-  const tokens = useMemo(() => highlightLine(content, language), [content, language]);
-  return <>{renderTokens(tokens)}</>;
 }
 
 function renderTokens(tokens: HighlightLine): ReactNode {
