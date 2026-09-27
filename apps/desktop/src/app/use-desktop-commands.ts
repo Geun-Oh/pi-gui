@@ -81,6 +81,8 @@ interface DesktopCommandsInput {
   readonly selectedToolId: string | null;
   readonly extensionViews: readonly DesktopExtensionViewInfo[];
   readonly openNewThread: (rootWorkspaceId?: string) => void;
+  /** Branches the open thread into a new side chat; undefined when there is no thread. */
+  readonly openSideChat: (() => void) | undefined;
   readonly openSettings: (workspaceId?: string, section?: SettingsSection) => void;
   readonly openSkills: (workspaceId?: string) => void;
   readonly openExtensions: (workspaceId?: string) => void;
@@ -202,6 +204,10 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
     [desktopCommands.openNewThread]: openNewThread,
     [desktopCommands.toggleTerminal]: () => toggleWorkbenchTool("terminal"),
     [desktopCommands.toggleSidePanel]: toggleSidePanel,
+    [desktopCommands.openSideChat]: () => {
+      if (!sidePanelAvailable || !input.openSideChat) return false;
+      input.openSideChat();
+    },
     [desktopCommands.toggleReview]: () => {
       // A chord replayed from the early buffer can also arrive over IPC. Collapse
       // that same-tick pair while preserving a deliberate second press.
@@ -423,6 +429,7 @@ export function useDesktopCommands(input: DesktopCommandsInput) {
           toggleSidebar: togglePrimarySidebar,
           toggleTool: toggleWorkbenchTool,
           toggleSidePanel,
+          openSideChat: sidePanelAvailable ? input.openSideChat : undefined,
           extensionViews: input.extensionViews
             .filter((view) => view.state === "ready")
             .map((view) => {

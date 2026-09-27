@@ -110,6 +110,12 @@ import {
 import type { CustomProviderConfig } from "../../contracts/ipc";
 import { resolveRepoWorkspaceId } from "../../contracts/workspace-roots";
 import { decodeTaskWorkbenchTemplate, type TaskWorkbenchTemplate } from "../../contracts/workbench";
+import {
+  SIDE_CHAT_TITLE_PREFIX,
+  sideChatOwnRows,
+  sideChatTitleFor,
+  type SideChatTranscript,
+} from "../../contracts/side-chat";
 import { composerImageSavedSkipMessage } from "../../contracts/composer-attachments";
 import { quarantinePersistedComposerAttachments } from "../ipc/composer-attachment-pixels";
 import { SessionStateMap, type QueuedComposerEditState } from "../conversation/session-state-map";
@@ -180,6 +186,7 @@ export class DesktopAppStore {
   /** Serialize full-state refreshes so stale async builders cannot publish over newer state. */
   private refreshStateQueue: Promise<void> = Promise.resolve();
   private readonly selectedTranscriptListeners = new Set<SelectedTranscriptListener>();
+  private readonly sessionTranscriptListeners = new Set<(sessionRef: SessionRef) => void>();
   private readonly sessionEventListeners = new Set<SessionEventListener>();
   private readonly sessionEventQueues = new Map<string, Promise<void>>();
   /**
@@ -834,6 +841,14 @@ export class DesktopAppStore {
     };
   }
 
+  /** Called with the session whose cached transcript may have changed, for any session. */
+  subscribeToSessionTranscripts(listener: (sessionRef: SessionRef) => void): () => void {
+    this.sessionTranscriptListeners.add(listener);
+    return () => {
+      this.sessionTranscriptListeners.delete(listener);
+    };
+  }
+
   /* ── Workspace methods (delegated) ─────────────────────── */
 
   async addWorkspace(path: string): Promise<DesktopAppState> {
@@ -1150,6 +1165,92 @@ export class DesktopAppStore {
       state: structuredClone(this.state),
       result,
     };
+  }
+
+  /* ── Side chats ────────────────────────────────────────── */
+
+  /**
+   * Branch a thread into a side chat: a clone of its active branch (pi's /clone) that
+   * its own agent runs beside the thread, shown in the thread's side panel only.
+   */
+  async openSideChat(
+    parentRef: SessionRef,
+  ): Promise<{ readonly sideChat: SessionRef; readonly state: DesktopAppState }> {
+    await this.initialize();
+    const parent = this.sessionFromState(parentRef);
+    if (!parent) {
+      throw new Error("This thread is no longer available.");
+    }
+    if (this.sessionState.sideChatsBySession.has(sessionKey(parentRef))) {
+      throw new Error("A side chat cannot open another side chat.");
+    }
+    const snapshot = await this.driver.cloneSession(parentRef, {
+      title: `${SIDE_CHAT_TITLE_PREFIX}${parent.title}`,
+    });
+    this.sessionState.sideChatsBySession.set(sessionKey(snapshot.ref), {
+      parentSessionId: parentRef.sessionId,
+      branchedAt: new Date().toISOString(),
+    });
+    this.updateSessionConfig(snapshot.ref, snapshot.config);
+    this.updateSessionUsage(snapshot.ref, snapshot.usage);
+    await this.reloadTranscriptFromDriver(snapshot.ref);
+    await this.ensureSessionSubscription(snapshot.ref);
+    const state = await this.refreshState({ markSelectedSessionViewed: false });
+    return { sideChat: snapshot.ref, state };
+  }
+
+  async loadSideChatTranscript(sessionRef: SessionRef): Promise<void> {
+    await this.initialize();
+    this.requireSideChat(sessionRef);
+    await this.ensureTranscriptLoaded(sessionRef);
+  }
+
+  sideChatTranscript(sessionRef: SessionRef): SideChatTranscript {
+    return {
+      workspaceId: sessionRef.workspaceId,
+      sessionId: sessionRef.sessionId,
+      transcript: this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
+    };
+  }
+
+  /** Resolves when the side chat's turn ends; the transcript streams in meanwhile. */
+  async sendSideChatMessage(sessionRef: SessionRef, text: string): Promise<DesktopAppState> {
+    await this.initialize();
+    this.requireSideChat(sessionRef);
+    const message = text.trim();
+    if (!message) {
+      throw new Error("Type a question for the side chat first.");
+    }
+    if (this.sessionFromState(sessionRef)?.status === "running") {
+      throw new Error("The side chat is still answering. Stop it or wait before asking again.");
+    }
+    await this.ensureSessionReady(sessionRef);
+    const record = this.sessionState.sideChatsBySession.get(sessionKey(sessionRef));
+    const asked = sideChatOwnRows(
+      this.sessionState.transcriptCache.get(sessionKey(sessionRef)) ?? [],
+      record?.branchedAt ?? "",
+    ).some((item) => item.kind === "message" && item.role === "user");
+    if (!asked) {
+      // Name the branch after its first question, for its tab and for pi's session list.
+      await this.driver.renameSession(sessionRef, sideChatTitleFor(message));
+    }
+    await this.conversationOwner.sendMessageToSession(sessionRef, message, []);
+    return this.refreshState({ markSelectedSessionViewed: false });
+  }
+
+  async stopSideChat(sessionRef: SessionRef): Promise<DesktopAppState> {
+    await this.initialize();
+    this.requireSideChat(sessionRef);
+    return this.cancelCurrentRun(sessionRef);
+  }
+
+  private requireSideChat(sessionRef: SessionRef): void {
+    if (
+      !this.sessionState.sideChatsBySession.has(sessionKey(sessionRef)) ||
+      !this.sessionFromState(sessionRef)
+    ) {
+      throw new Error("This side chat is no longer available.");
+    }
   }
 
   /* ── Session / thread methods (delegated) ───────────────── */
@@ -2025,6 +2126,7 @@ export class DesktopAppStore {
       lastInteractedAtBySession: persisted.lastInteractedAtBySession ?? {},
       pinnedAtBySession: persisted.pinnedAtBySession ?? {},
       pinnedSessionOrder: persisted.pinnedSessionOrder ?? [],
+      sideChatsBySession: persisted.sideChatsBySession ?? {},
       workspaceOrder: persisted.workspaceOrder ?? [],
       themeMode: persisted.themeMode ?? this.state.themeMode,
       themePresetId: persisted.themePresetId ?? this.state.themePresetId,
@@ -2056,6 +2158,10 @@ export class DesktopAppStore {
       this.sessionState.pinnedAtBySession,
       persisted.pinnedSessionOrder ?? [],
     ).slice();
+    this.sessionState.sideChatsBySession.clear();
+    for (const [key, record] of Object.entries(persisted.sideChatsBySession ?? {})) {
+      this.sessionState.sideChatsBySession.set(key, record);
+    }
     this.sessionState.composerDraftsBySession.clear();
     for (const [key, draft] of Object.entries(persisted.composerDraftsBySession ?? {})) {
       if (draft) {
@@ -2174,7 +2280,9 @@ export class DesktopAppStore {
       const selectedSessionId = resolveSelectedSessionIdFromCatalog(
         selectedWorkspaceId,
         options.selectedSessionId ?? this.state.selectedSessionId,
-        sessionsSnapshot.sessions,
+        sessionsSnapshot.sessions.filter(
+          (session) => !this.sessionState.sideChatsBySession.has(sessionKey(session.sessionRef)),
+        ),
       );
 
       if (selectedWorkspaceId && selectedSessionId && options.hydrateSelectedSession !== false) {
@@ -2319,6 +2427,7 @@ export class DesktopAppStore {
         lastInteractedAtBySession: mapToRecord(this.sessionState.lastInteractedAtBySession),
         pinnedAtBySession: mapToRecord(this.sessionState.pinnedAtBySession),
         pinnedSessionOrder,
+        sideChatsBySession: mapToRecord(this.sessionState.sideChatsBySession),
         workspaceOrder: this.state.workspaceOrder,
         modelSettingsScopeMode: this.state.modelSettingsScopeMode,
         globalModelSettings,
@@ -3578,7 +3687,12 @@ export class DesktopAppStore {
     ) {
       return state.selectedSessionId;
     }
-    return workspace.sessions[0]?.id ?? "";
+    // A side chat is never the thread a window falls back to.
+    return (
+      workspace.sessions.find(
+        (session) => !state.sideChatsBySession[`${workspace.id}:${session.id}`],
+      )?.id ?? ""
+    );
   }
 
   sessionFromState(sessionRef: SessionRef) {
@@ -3698,6 +3812,10 @@ export class DesktopAppStore {
       pinnedSessionOrder:
         this.sessionState.pinnedSessionOrder.length > 0
           ? this.sessionState.pinnedSessionOrder
+          : undefined,
+      sideChatsBySession:
+        this.sessionState.sideChatsBySession.size > 0
+          ? mapToRecord(this.sessionState.sideChatsBySession)
           : undefined,
       workspaceOrder: this.state.workspaceOrder.length > 0 ? this.state.workspaceOrder : undefined,
       modelSettingsScopeMode: this.state.modelSettingsScopeMode,
@@ -3839,6 +3957,9 @@ export class DesktopAppStore {
   }
 
   publishSelectedTranscriptFor(sessionRef: SessionRef): void {
+    for (const listener of this.sessionTranscriptListeners) {
+      listener(sessionRef);
+    }
     if (!this.isSelectedSession(sessionRef)) {
       return;
     }

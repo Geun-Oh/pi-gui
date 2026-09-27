@@ -18,10 +18,14 @@ import { decodeAttachments } from "./attachment-store";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { decodeTaskWorkbenchTemplate, type TaskWorkbenchTemplate } from "../../contracts/workbench";
+import type { SideChatRecord } from "../../contracts/side-chat";
+
+/** v20 adds `sideChatsBySession`; v19 added workbench templates' review scope. */
+const UI_STATE_VERSION = 20;
 
 export interface PersistedUiState {
   readonly version?:
-    2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19;
+    2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20;
   readonly taskWorkbenchTemplatesBySession?: Record<string, TaskWorkbenchTemplate>;
   readonly selectedWorkspaceId?: string;
   readonly selectedSessionId?: string;
@@ -40,6 +44,7 @@ export interface PersistedUiState {
   readonly lastInteractedAtBySession?: Record<string, string>;
   readonly pinnedAtBySession?: Record<string, string>;
   readonly pinnedSessionOrder?: readonly string[];
+  readonly sideChatsBySession?: Record<string, SideChatRecord>;
   readonly workspaceOrder?: readonly string[];
   readonly modelSettingsScopeMode?: ModelSettingsScopeMode;
   readonly appGlobalModelSettings?: ModelSettingsSnapshot;
@@ -106,6 +111,7 @@ export function decodePersistedUiState(parsed: unknown): LegacyPersistedUiState 
     lastInteractedAtBySession: toStringRecord(candidate.lastInteractedAtBySession),
     pinnedAtBySession: toStringRecord(candidate.pinnedAtBySession),
     pinnedSessionOrder: toStringArray(candidate.pinnedSessionOrder),
+    sideChatsBySession: toSideChatRecords(candidate.sideChatsBySession),
     workspaceOrder: toStringArray(candidate.workspaceOrder),
     modelSettingsScopeMode:
       candidate.modelSettingsScopeMode === "per-repo" ||
@@ -137,7 +143,7 @@ export async function writePersistedUiState(
   const serialized = `${JSON.stringify(
     {
       ...payload,
-      version: 19,
+      version: UI_STATE_VERSION,
     } satisfies PersistedUiState,
     null,
     2,
@@ -146,7 +152,7 @@ export async function writePersistedUiState(
   await writeFileAtomicQueued(uiStateFilePath, serialized, decodePersistedUiState, {
     preserveExistingAs: (validated) => {
       const existing = validated as LegacyPersistedUiState;
-      if (existing.version === 19) return undefined;
+      if (existing.version === UI_STATE_VERSION) return undefined;
       return join(
         dirname(uiStateFilePath),
         `${basename(uiStateFilePath, ".json")}.pre-workbench-v${existing.version ?? "legacy"}.${randomUUID()}.json`,
@@ -206,6 +212,7 @@ function validateUiState(value: unknown): Record<string, unknown> {
       "lastInteractedAtBySession",
       "pinnedAtBySession",
       "pinnedSessionOrder",
+      "sideChatsBySession",
       "workspaceOrder",
       "modelSettingsScopeMode",
       "appGlobalModelSettings",
@@ -263,6 +270,15 @@ function validateUiState(value: unknown): Record<string, unknown> {
     optional(root, key, boolean);
   optional(root, "activeView", (v) => toAppView(v) !== undefined);
   optional(root, "threadGrouping", isThreadGrouping);
+  if (root.sideChatsBySession !== undefined) {
+    const records = objectRecord(root.sideChatsBySession) ?? fail("sideChatsBySession");
+    for (const [key, value] of Object.entries(records)) {
+      const path = `sideChatsBySession.${key}`;
+      const record = objectRecord(value) ?? fail(path);
+      knownKeys(record, ["parentSessionId", "branchedAt"], path);
+      if (!key || !string(record.parentSessionId) || !string(record.branchedAt)) fail(path);
+    }
+  }
   optional(root, "themeMode", isThemeMode);
   optional(root, "themePresetId", isThemePresetId);
   optional(root, "modelSettingsScopeMode", (v) => v === "per-repo" || v === "app-global");
@@ -501,9 +517,23 @@ function toAppView(value: unknown): AppView | undefined {
 }
 
 function toPersistedVersion(value: unknown): NonNullable<PersistedUiState["version"]> | undefined {
-  return typeof value === "number" && Number.isInteger(value) && value >= 2 && value <= 19
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 2 &&
+    value <= UI_STATE_VERSION
     ? (value as NonNullable<PersistedUiState["version"]>)
     : undefined;
+}
+
+function toSideChatRecords(value: unknown): Record<string, SideChatRecord> | undefined {
+  const records = objectRecord(value);
+  if (!records) return undefined;
+  return Object.fromEntries(
+    Object.entries(records).map(([key, record]) => {
+      const { parentSessionId, branchedAt } = record as SideChatRecord;
+      return [key, { parentSessionId, branchedAt }];
+    }),
+  );
 }
 
 function toStringArray(value: unknown): string[] | undefined {

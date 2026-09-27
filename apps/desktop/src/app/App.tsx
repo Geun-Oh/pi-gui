@@ -11,6 +11,11 @@ import {
   scheduledOriginsByMessageId,
 } from "../../contracts/scheduled-tasks";
 import { updateSnapshot, useDesktopAppState } from "./desktop-app-state";
+import { withoutSideChats } from "../../contracts/side-chat";
+import { toolRefId } from "../../contracts/workbench";
+import { SideChatTab } from "../features/side-chat/side-chat-panel";
+import { SelectionSideChatAction } from "../features/side-chat/selection-side-chat-action";
+import { useSideChats } from "../features/side-chat/use-side-chats";
 import { DesktopStartupSurface, toStartupSurfaceState } from "./desktop-recovery";
 import { buildFileWorkbenchContexts } from "./file-workbench-contexts";
 import { canTogglePrimarySidebar } from "./app-shell-utils";
@@ -163,7 +168,10 @@ export default function App() {
     visibleWorkspaces,
   } = useMemo(() => deriveWorkspaceContext(snapshot), [snapshot]);
   const selectedSession = snapshot
-    ? (getSelectedSession(snapshot) ?? selectedWorkspace?.sessions[0])
+    ? (getSelectedSession(snapshot) ??
+      selectedWorkspace?.sessions.find(
+        (session) => !snapshot.sideChatsBySession[`${selectedWorkspace.id}:${session.id}`],
+      ))
     : undefined;
   const selectedRuntime = selectedWorkspace
     ? snapshot?.runtimeByWorkspace[selectedWorkspace.id]
@@ -417,6 +425,15 @@ export default function App() {
     },
     [api],
   );
+
+  const sideChats = useSideChats({
+    api,
+    snapshot,
+    setSnapshot,
+    target: workbenchTarget,
+    threadTranscript: activeTranscript,
+    workbench,
+  });
 
   const dismissSchemaSkewNotice = useCallback((sessionKey: string) => {
     setDismissedSchemaSkewSessionKeys((current) => {
@@ -686,6 +703,7 @@ export default function App() {
     selectedToolId,
     extensionViews: extensionViews.views,
     openNewThread: newThread.openSurface,
+    openSideChat: selectedThreadTarget ? () => sideChats.open() : undefined,
     openSettings,
     openSkills,
     openExtensions,
@@ -1152,6 +1170,11 @@ export default function App() {
                     }
                     scheduledOrigins={scheduledOrigins}
                   />
+                  <SelectionSideChatAction
+                    disabled={sideChats.pending}
+                    onAsk={sideChats.open}
+                    paneRef={timelinePaneRef}
+                  />
                 </div>
               </section>
               {scheduledBinding ? (
@@ -1302,7 +1325,11 @@ export default function App() {
             onActivateTool={workbench.activateTool}
             onCloseTool={workbench.closeTool}
             onShowChooser={workbench.showChooser}
-            error={workbench.error || extensionHostActions.fileError}
+            onOpenSideChat={() => sideChats.open()}
+            sideChatPending={sideChats.pending}
+            sideChatHistory={sideChats.history}
+            onReopenSideChat={sideChats.reopen}
+            error={workbench.error || extensionHostActions.fileError || sideChats.error}
             loading={!workbench.ready}
             onRetryRestore={workbench.retryRestore}
           >
@@ -1316,6 +1343,19 @@ export default function App() {
                 onPrepareTaskDraftPendingChange={
                   extensionHostActions.handlePrepareTaskDraftPendingChange
                 }
+              />
+            ) : activeTool?.kind === "side-chat" ? (
+              <SideChatTab
+                key={`${selectedSessionKey}:${activeTool.sessionId}`}
+                api={api}
+                onCloseTab={() => workbench.closeTool(toolRefId(activeTool))}
+                onOpenWorkspaceFileLine={handleOpenWorkspaceFileLine}
+                parent={selectedSession}
+                parentTitle={displayedSessionTitle}
+                sessionId={activeTool.sessionId}
+                sideChats={sideChats}
+                snapshot={snapshot}
+                workspace={selectedWorkspace}
               />
             ) : activeTool && activeTool.kind !== "extension" ? (
               renderBuiltinToolPanel(activeTool.kind, {
@@ -1374,7 +1414,7 @@ export default function App() {
               ? snapshot.scheduledTasks.find((task) => task.id === scheduledEditor.taskId)
               : undefined
           }
-          workspaces={snapshot.workspaces}
+          workspaces={withoutSideChats(snapshot.workspaces, snapshot.sideChatsBySession)}
           selectedWorkspaceId={snapshot.selectedWorkspaceId}
           busy={false}
           error={snapshot.lastError}

@@ -6,6 +6,7 @@ import { BUILTIN_TOOL_ENTRIES } from "../workbench/builtin-tools";
 import type { SettingsSection } from "../settings/settings-view";
 import { sectionTitle } from "../settings/settings-sections";
 import {
+  ChatIcon,
   ClockIcon,
   ExtensionIcon,
   FileIcon,
@@ -60,6 +61,8 @@ export interface PaletteActionContext {
   /** Shows the tool in the side panel, or hides the panel when that tool is already showing. */
   readonly toggleTool: (kind: BuiltinToolKind) => void;
   readonly toggleSidePanel: () => void;
+  /** Branches the open thread into a new side chat tab. */
+  readonly openSideChat?: () => void;
   /** Extension views the side panel can open for this thread. */
   readonly extensionViews: readonly {
     readonly id: string;
@@ -131,6 +134,15 @@ export function buildPaletteActions(context: PaletteActionContext): readonly Pal
       hint: formatShortcut(platform, "B", { alt: true }),
       run: context.toggleSidePanel,
     });
+    if (context.openSideChat) {
+      actions.push({
+        id: "open-side-chat",
+        title: "Open side chat",
+        icon: <ChatIcon />,
+        hint: formatShortcut(platform, "S", { alt: true }),
+        run: context.openSideChat,
+      });
+    }
     for (const view of context.extensionViews) {
       actions.push({
         id: `extension-view:${view.id}`,

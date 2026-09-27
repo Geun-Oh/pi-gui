@@ -901,6 +901,61 @@ export async function seedForkSessionFixture(
   });
 }
 
+/**
+ * A pi session whose messages have the shapes pi itself persists, so a real model
+ * request can replay them. Timestamps default to minutes in the past.
+ */
+export async function seedConversationSessionFixture(
+  agentDir: string,
+  workspacePath: string,
+  session: {
+    readonly title: string;
+    readonly messages: readonly { readonly role: "user" | "assistant"; readonly text: string }[];
+    /** Provider and model the assistant messages name; the thread uses the latest one. */
+    readonly model?: { readonly provider: string; readonly id: string };
+  },
+): Promise<{ readonly sessionId: string; readonly title: string }> {
+  const { SessionManager } = (await import("@earendil-works/pi-coding-agent")) as {
+    SessionManager: {
+      create(cwd: string): {
+        appendMessage(message: Record<string, unknown>): string;
+        appendSessionInfo(name: string): string;
+        getSessionId(): string;
+      };
+    };
+  };
+  return withAgentDirEnv(agentDir, async () => {
+    const sessionManager = SessionManager.create(workspacePath);
+    const start = Date.now() - (session.messages.length + 1) * 60_000;
+    session.messages.forEach((message, index) => {
+      const timestamp = start + index * 60_000;
+      sessionManager.appendMessage(
+        message.role === "user"
+          ? { role: "user", content: message.text, timestamp }
+          : {
+              role: "assistant",
+              content: [{ type: "text", text: message.text }],
+              api: "openai-completions",
+              provider: session.model?.provider ?? "fixture",
+              model: session.model?.id ?? "fixture",
+              usage: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 0,
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+              },
+              stopReason: "stop",
+              timestamp,
+            },
+      );
+    });
+    sessionManager.appendSessionInfo(session.title);
+    return { sessionId: sessionManager.getSessionId(), title: session.title };
+  });
+}
+
 async function withAgentDirEnv<T>(agentDir: string, action: () => Promise<T>): Promise<T> {
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentDir;

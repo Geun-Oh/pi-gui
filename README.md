@@ -73,6 +73,10 @@ the review tab, your worktrees, and tabs from desktop extensions. Each task keep
   composer, and give desktop extensions their own workbench tabs.
 - **Any provider.** Sign in with OAuth, paste an API key, or point at a custom endpoint.
   Pick the model and thinking level per thread.
+- **Side chats.** Ask a side question on a branch of the thread without steering it: open
+  **Side chat** in the side panel (<kbd>⌘</kbd> <kbd>⌥</kbd> <kbd>S</kbd>), or select text in the
+  thread and choose **Ask in side chat** to quote it. Each side chat is its own pi session cloned
+  from the thread, kept with the thread and out of the thread list.
 - **Fork and rewind.** Fork a thread from any message into the same checkout or a new
   worktree, and move around the session tree with `/tree`.
 - **Composer.** `@`-mention files, and paste or drop images into the prompt.

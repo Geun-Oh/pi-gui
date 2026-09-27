@@ -15,7 +15,7 @@ import { ThreadSearchBar } from "./thread-search";
 import { TimelineItem } from "./timeline-item";
 import type { OpenTurnChange } from "./turn-changes-card";
 import type { WorkspaceFileLine } from "./workspace-file-line";
-import { SparkIcon } from "../../ui/icons";
+import { ChatIcon, SparkIcon } from "../../ui/icons";
 
 interface ThreadSearchModel {
   readonly isOpen: boolean;
@@ -40,6 +40,8 @@ interface ConversationTimelineProps {
   readonly onOpenWorkspaceFileLine?: (target: WorkspaceFileLine) => void;
   readonly scheduledOrigins?: ReadonlyMap<string, ScheduledTaskOrigin>;
   readonly workspacePath?: string;
+  /** A side chat panel reuses the thread timeline without Fork and with its own test ids. */
+  readonly variant?: "thread" | "side-chat";
 }
 export function ConversationTimeline({
   transcript,
@@ -54,7 +56,9 @@ export function ConversationTimeline({
   onOpenWorkspaceFileLine,
   scheduledOrigins,
   workspacePath,
+  variant = "thread",
 }: ConversationTimelineProps) {
+  const sideChat = variant === "side-chat";
   const [expandedToolCallIds, setExpandedToolCallIds] = useState<Set<string>>(() => new Set());
   const toggleToolCall = useCallback(
     (id: string) =>
@@ -97,30 +101,39 @@ export function ConversationTimeline({
           />
         ) : null}
         <div
-          className="timeline-pane timeline-pane--thread"
-          data-testid="timeline-pane"
+          className={`timeline-pane timeline-pane--${variant}`}
+          data-testid={sideChat ? "side-chat-timeline-pane" : "timeline-pane"}
           ref={viewport.attachPane}
           tabIndex={0}
         >
           {transcriptFailed ? (
-            <div className="timeline" data-testid="transcript">
+            <div
+              className="timeline"
+              data-testid={sideChat ? "side-chat-transcript" : "transcript"}
+            >
               <TranscriptHydrateError
                 retrying={transcriptFailed.retrying}
                 onRetry={onRetryTranscript}
               />
             </div>
           ) : isTranscriptLoading ? (
-            <div className="timeline" data-testid="transcript">
+            <div
+              className="timeline"
+              data-testid={sideChat ? "side-chat-transcript" : "transcript"}
+            >
               <TranscriptSkeleton />
             </div>
           ) : transcript.length === 0 ? (
-            <div className="timeline" data-testid="transcript">
-              <TranscriptEmptyState />
+            <div
+              className="timeline"
+              data-testid={sideChat ? "side-chat-transcript" : "transcript"}
+            >
+              {sideChat ? <SideChatEmptyState /> : <TranscriptEmptyState />}
             </div>
           ) : (
             <div
               className="timeline timeline--virtualized"
-              data-testid="transcript"
+              data-testid={sideChat ? "side-chat-transcript" : "transcript"}
               style={{ height: viewport.totalHeight }}
             >
               {viewport.visibleRows.map(({ item, top }) => (
@@ -135,7 +148,7 @@ export function ConversationTimeline({
                   onToggleToolCall={toggleToolCall}
                   onViewFileInDiff={onViewFileInDiff}
                   onOpenTurnChange={onOpenTurnChange}
-                  sourceMessageIndex={renderedMessageIndexById.get(item.id)}
+                  sourceMessageIndex={sideChat ? undefined : renderedMessageIndexById.get(item.id)}
                   onForkFromMessage={onForkFromMessage}
                   onOpenWorkspaceFileLine={onOpenWorkspaceFileLine}
                   workspacePath={workspacePath}
@@ -219,6 +232,20 @@ function TranscriptEmptyState() {
       </span>
       <p className="transcript-empty__title">Start the conversation</p>
       <p className="transcript-empty__hint">Send a prompt below to begin this session.</p>
+    </div>
+  );
+}
+
+function SideChatEmptyState() {
+  return (
+    <div className="transcript-empty" data-testid="side-chat-empty">
+      <span className="transcript-empty__glyph" aria-hidden="true">
+        <ChatIcon />
+      </span>
+      <p className="transcript-empty__title">Ask a side question</p>
+      <p className="transcript-empty__hint">
+        This branch knows the thread so far. Its answers stay here and do not change the thread.
+      </p>
     </div>
   );
 }

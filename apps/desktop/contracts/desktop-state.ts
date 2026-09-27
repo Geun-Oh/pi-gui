@@ -10,6 +10,7 @@ export type SessionStatus = "idle" | "running" | "failed";
 export type { SessionRole, TimelineToolCall, TranscriptMessage } from "./timeline-types";
 import type { TranscriptMessage } from "./timeline-types";
 import type { ScheduledTaskRecord } from "./scheduled-tasks";
+import type { SideChatRecord } from "./side-chat";
 export type {
   CreateScheduledTaskInput,
   ScheduledTaskFilter,
@@ -345,6 +346,8 @@ export interface DesktopAppState {
   readonly lastInteractedAtBySession: Readonly<Record<string, string>>;
   readonly pinnedAtBySession: Readonly<Record<string, string>>;
   readonly pinnedSessionOrder: readonly string[];
+  /** Sessions that are side chats of a thread; they stay out of thread lists. */
+  readonly sideChatsBySession: Readonly<Record<string, SideChatRecord>>;
   readonly workspaceOrder: readonly string[];
   readonly modelSettingsScopeMode: ModelSettingsScopeMode;
   readonly globalModelSettings: ModelSettingsSnapshot;
@@ -397,6 +400,7 @@ export function createEmptyDesktopAppState(): DesktopAppState {
     lastInteractedAtBySession: {},
     pinnedAtBySession: {},
     pinnedSessionOrder: [],
+    sideChatsBySession: {},
     workspaceOrder: [],
     modelSettingsScopeMode: "app-global",
     globalModelSettings: {

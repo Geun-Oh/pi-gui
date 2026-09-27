@@ -15,6 +15,7 @@ import type {
 import type { ClipboardImageRead } from "./composer-attachments";
 import type { SessionRef } from "@pi-gui/session-driver/types";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "./workbench";
+import type { SendSideChatMessageInput, SideChatTranscript } from "./side-chat";
 import type {
   TurnChangesInput,
   TurnChangesResult,
@@ -172,6 +173,12 @@ export const desktopIpc = {
   submitComposer: "pi-gui:submit-composer",
   getSessionTree: "pi-gui:get-session-tree",
   navigateSessionTree: "pi-gui:navigate-session-tree",
+  openSideChat: "pi-gui:open-side-chat",
+  watchSideChat: "pi-gui:watch-side-chat",
+  unwatchSideChat: "pi-gui:unwatch-side-chat",
+  sendSideChatMessage: "pi-gui:send-side-chat-message",
+  stopSideChat: "pi-gui:stop-side-chat",
+  sideChatTranscriptChanged: "pi-gui:side-chat-transcript-changed",
   toggleWindowMaximize: "pi-gui:toggle-window-maximize",
   listWorkspaceFiles: "pi-gui:list-workspace-files",
   readWorkspaceFile: "pi-gui:read-workspace-file",
@@ -199,6 +206,7 @@ export const desktopCommands = {
   openNewThread: "open-new-thread",
   toggleTerminal: "toggle-terminal",
   toggleSidePanel: "toggle-side-panel",
+  openSideChat: "open-side-chat",
   toggleReview: "toggle-review",
   closeFocusedSurface: "close-focused-surface",
   toggleSidebar: "toggle-sidebar",
@@ -547,10 +555,14 @@ export function getDesktopCommandFromShortcut(
   const isShiftO = input.shift && (lowerKey === "o" || input.code === "KeyO");
   const isShiftR = input.shift && isR;
   const isShiftA = input.shift && (lowerKey === "a" || input.code === "KeyA");
+  const isS = lowerKey === "s" || input.code === "KeyS";
 
   if (input.alt) {
     if (!input.shift && isB) {
       return desktopCommands.toggleSidePanel;
+    }
+    if (!input.shift && isS) {
+      return desktopCommands.openSideChat;
     }
     return undefined;
   }
@@ -810,6 +822,17 @@ export interface PiDesktopApi {
     targetId: string,
     options?: NavigateSessionTreeOptions,
   ): Promise<{ readonly state: DesktopAppState; readonly result: NavigateSessionTreeResult }>;
+  /** Branch `parent` into a new side chat; the result names the side chat session. */
+  openSideChat(
+    parent: SessionRef,
+  ): Promise<{ readonly sideChat: SessionRef; readonly state: DesktopAppState }>;
+  /** Current transcript of a side chat; later changes arrive through onSideChatTranscriptChanged. */
+  watchSideChat(target: SessionRef): Promise<SideChatTranscript>;
+  unwatchSideChat(target: SessionRef): Promise<void>;
+  /** Resolves when the side chat's turn ends. */
+  sendSideChatMessage(input: SendSideChatMessageInput): Promise<DesktopAppState>;
+  stopSideChat(target: SessionRef): Promise<DesktopAppState>;
+  onSideChatTranscriptChanged(listener: (payload: SideChatTranscript) => void): () => void;
   listWorkspaceFiles(
     workspaceId: string,
     options?: { readonly force?: boolean },

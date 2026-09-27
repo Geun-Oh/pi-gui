@@ -1,0 +1,171 @@
+/* ---- Side chat: a branch of the thread in a side panel tab ------------- */
+
+.side-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--main);
+}
+
+.side-chat__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.side-chat__branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-chat__branch strong {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.side-chat__status {
+  flex: none;
+  color: var(--accent);
+}
+
+.side-chat__inherited {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  margin: 10px 12px 2px;
+  padding: 6px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.side-chat__link {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.side-chat__timeline {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.side-chat .timeline {
+  /* The panel is already narrow; use its full width for prose. */
+  --transcript-measure: 100%;
+}
+
+.timeline-pane--side-chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  max-height: none;
+  padding-block-start: 12px;
+  padding-inline: 12px calc(12px - var(--scrollbar-size));
+  scrollbar-gutter: stable;
+}
+
+.side-chat__composer.composer {
+  flex: none;
+  padding: 10px 12px 12px;
+  background: transparent;
+}
+
+.side-chat__quote {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.side-chat__quote blockquote {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: 96px;
+  margin: 0;
+  padding: 4px 10px;
+  overflow: auto;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.side-chat__quote-remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
+.side-chat__composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Floating "Ask in side chat" next to text selected in the thread. */
+.selection-side-chat {
+  position: fixed;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.selection-side-chat:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.selection-side-chat:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.selection-side-chat svg {
+  width: 14px;
+  height: 14px;
+}
+
+.workbench__choice-title--clamped {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

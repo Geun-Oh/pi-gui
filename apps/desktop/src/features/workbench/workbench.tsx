@@ -6,7 +6,7 @@ import {
 } from "../../../contracts/ipc";
 import { toolRefId, type TaskWorkbenchTemplate, type ToolRef } from "../../../contracts/workbench";
 import type { DesktopExtensionViewInfo } from "../../../contracts/extension-views";
-import { CloseIcon, ExtensionIcon, PlusIcon, SidePanelIcon } from "../../ui/icons";
+import { ChatIcon, CloseIcon, ExtensionIcon, PlusIcon, SidePanelIcon } from "../../ui/icons";
 import { BUILTIN_TOOL_ENTRIES, BUILTIN_TOOLS } from "./builtin-tools";
 import { WorkbenchResizeHandle } from "./workbench-resize-handle";
 import { activeWorkbenchTool } from "./workbench-state";
@@ -22,6 +22,16 @@ interface WorkbenchProps {
   readonly onActivateTool: (toolId: string) => void;
   readonly onCloseTool: (toolId: string) => void;
   readonly onShowChooser: () => void;
+  /** Branch the task into a new side chat tab; absent while that is unavailable. */
+  readonly onOpenSideChat?: () => void;
+  readonly sideChatPending?: boolean;
+  /** This task's side chats without an open tab, newest first. */
+  readonly sideChatHistory?: readonly {
+    readonly sessionId: string;
+    readonly label: string;
+    readonly updatedAt: string;
+  }[];
+  readonly onReopenSideChat?: (sessionId: string) => void;
   readonly children?: ReactNode;
   readonly error?: string;
   readonly loading?: boolean;
@@ -32,12 +42,19 @@ interface WorkbenchProps {
   readonly onReloadExtensionViews?: () => void;
 }
 
-export function workbenchToolLabel(tool: ToolRef): string {
-  return tool.kind === "extension" ? tool.viewId : BUILTIN_TOOLS[tool.kind].label;
+export function workbenchToolLabel(tool: ToolRef, tools: readonly ToolRef[] = [tool]): string {
+  if (tool.kind === "extension") return tool.viewId;
+  if (tool.kind === "side-chat") {
+    const sideChats = tools.filter((entry) => entry.kind === "side-chat");
+    const index = sideChats.findIndex((entry) => entry.sessionId === tool.sessionId);
+    return index > 0 ? `Side chat ${index + 1}` : "Side chat";
+  }
+  return BUILTIN_TOOLS[tool.kind].label;
 }
 
 function ToolIcon({ tool }: { readonly tool: ToolRef }) {
   if (tool.kind === "extension") return <ExtensionIcon />;
+  if (tool.kind === "side-chat") return <ChatIcon />;
   const { Icon } = BUILTIN_TOOLS[tool.kind];
   return <Icon />;
 }
@@ -52,6 +69,10 @@ export function Workbench({
   onActivateTool,
   onCloseTool,
   onShowChooser,
+  onOpenSideChat,
+  sideChatPending = false,
+  sideChatHistory = [],
+  onReopenSideChat,
   children,
   error,
   loading = false,
@@ -144,7 +165,7 @@ export function Workbench({
                 ? (extensionViews.find(
                     (entry) => entry.extensionId === tool.extensionId && entry.id === tool.viewId,
                   )?.title ?? workbenchToolLabel(tool))
-                : workbenchToolLabel(tool);
+                : workbenchToolLabel(tool, view.tools);
             const selected = view.selection.kind === "tool" && view.selection.toolId === toolId;
             const slot = index < SIDE_PANEL_TAB_SHORTCUT_SLOT_COUNT ? index + 1 : undefined;
             const shortcut = slot ? getSidePanelTabShortcutLabel(platform, slot) : undefined;
@@ -275,6 +296,55 @@ export function Workbench({
                 ) : null}
               </button>
             ))}
+            {onOpenSideChat ? (
+              <button
+                aria-keyshortcuts={platform === "darwin" ? "Meta+Alt+S" : "Control+Alt+S"}
+                aria-label="Side chat"
+                className="workbench__choice"
+                data-testid="workbench-choice-side-chat"
+                disabled={sideChatPending}
+                onClick={onOpenSideChat}
+                type="button"
+              >
+                <span className="workbench__choice-icon">
+                  <ChatIcon />
+                </span>
+                <span className="workbench__choice-copy">
+                  <strong>Side chat</strong>
+                  <span>
+                    {sideChatPending
+                      ? "Branching this thread…"
+                      : "Ask a side question on a branch of this thread"}
+                  </span>
+                </span>
+                <kbd className="workbench__choice-shortcut">
+                  {formatShortcut(platform, "S", { alt: true })}
+                </kbd>
+              </button>
+            ) : null}
+            {onReopenSideChat && sideChatHistory.length > 0 ? (
+              <>
+                <h3 className="workbench__extension-heading">Earlier side chats</h3>
+                {sideChatHistory.map((entry) => (
+                  <button
+                    aria-label={`Reopen side chat: ${entry.label}`}
+                    className="workbench__choice"
+                    data-testid="workbench-side-chat-history"
+                    key={entry.sessionId}
+                    onClick={() => onReopenSideChat(entry.sessionId)}
+                    type="button"
+                  >
+                    <span className="workbench__choice-icon">
+                      <ChatIcon />
+                    </span>
+                    <span className="workbench__choice-copy">
+                      <strong className="workbench__choice-title--clamped">{entry.label}</strong>
+                      <span>{entry.updatedAt}</span>
+                    </span>
+                  </button>
+                ))}
+              </>
+            ) : null}
             <h3 className="workbench__extension-heading">Extension views</h3>
             {extensionViewsLoading ? <p role="status">Loading extension views…</p> : null}
             {extensionViewsError ? (

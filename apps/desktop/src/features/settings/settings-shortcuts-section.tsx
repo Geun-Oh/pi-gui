@@ -37,6 +37,7 @@ const SHORTCUT_GROUPS: readonly {
       { title: "Switch to recent thread", modifiers: ["Mod"], key: "1–9" },
       { title: "Cycle through threads", modifiers: ["Ctrl"], key: "Tab" },
       { title: "Find in thread", modifiers: ["Mod"], key: "F" },
+      { title: "Open side chat", modifiers: ["Mod", "Alt"], key: "S" },
     ],
   },
   {

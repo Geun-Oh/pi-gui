@@ -26,6 +26,10 @@ import type { DesktopExtensionViewOwner } from "../extensions/extension-view-own
 import { registerExtensionViewRequests } from "./extension-view-requests";
 import { registerReviewRequests, type ReviewRequestsOwner } from "./review-requests";
 import { mainFrameHandler } from "./main-frame-ipc";
+import {
+  SideChatTranscriptPublisher,
+  type SideChatTranscriptSource,
+} from "../windows/side-chat-transcripts";
 import { assertComposerAttachmentPixels } from "./composer-attachment-pixels";
 import {
   expectAppView,
@@ -122,6 +126,9 @@ type OrchestrationOwner = Pick<
   "sendChildThreadFollowUp" | "setChildSupervisionLoop"
 >;
 
+type SideChatOwner = SideChatTranscriptSource &
+  Pick<DesktopAppStore, "openSideChat" | "sendSideChatMessage" | "stopSideChat">;
+
 type ScheduledTaskOwner = Pick<
   DesktopAppStore,
   | "createScheduledTask"
@@ -161,6 +168,7 @@ export interface DesktopIpcOwners {
   readonly workspace: WorkspaceOwner;
   readonly conversation: ConversationOwner;
   readonly orchestration: OrchestrationOwner;
+  readonly sideChats: SideChatOwner;
   readonly scheduledTasks: ScheduledTaskOwner;
   readonly settings: SettingsOwner;
 }
@@ -244,6 +252,34 @@ export function registerDesktopIpc({
     desktopIpc.saveTaskWorkbenchTemplate,
     expectSaveTaskWorkbenchTemplateInput,
     (input, request) => workbench.save(trackWorkbenchSender(request.contents), input),
+  );
+  const sideChats = new SideChatTranscriptPublisher(owners.sideChats);
+  handleMainFrame(desktopIpc.openSideChat, expectSessionTarget, (parent, { window }) =>
+    windows.runStateResultAction(window, () => owners.sideChats.openSideChat(parent)),
+  );
+  handleMainFrame(desktopIpc.watchSideChat, expectSessionTarget, (target, { contents }) =>
+    sideChats.watch(contents, target),
+  );
+  handleMainFrame(desktopIpc.unwatchSideChat, expectSessionTarget, (target, { contents }) => {
+    sideChats.unwatch(contents, target);
+  });
+  handleMainFrame(
+    desktopIpc.sendSideChatMessage,
+    (raw) => {
+      const input = expectRecord(raw, "side chat message");
+      return {
+        target: expectSessionTarget(input.target),
+        text: expectNonEmptyString(input.text, "text"),
+      };
+    },
+    // The turn can run for minutes, so like an ordinary prompt it stays out of the window queue.
+    ({ target, text }, { window }) =>
+      windows.runImmediateStateAction(window, () =>
+        owners.sideChats.sendSideChatMessage(target, text),
+      ),
+  );
+  handleMainFrame(desktopIpc.stopSideChat, expectSessionTarget, (target, { window }) =>
+    windows.runImmediateStateAction(window, () => owners.sideChats.stopSideChat(target)),
   );
   const run = (event: IpcMainInvokeEvent, action: () => Promise<DesktopAppState>) =>
     windows.runStateAction(senderWindow(windows, event), action);

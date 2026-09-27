@@ -65,7 +65,10 @@ export function buildThreadSidebarModel(
   state: DesktopAppState,
   nowMs: number = Date.now(),
 ): ThreadSidebarModel {
-  const entries = collectThreadEntries(state);
+  // Side chats appear in their thread's side panel, never as threads of their own.
+  const entries = collectThreadEntries(state).filter(
+    (entry) => !state.sideChatsBySession[`${entry.workspaceId}:${entry.session.id}`],
+  );
   const pinnedThreads = entries
     .filter((entry) => !entry.session.archivedAt && Boolean(entry.session.pinnedAt))
     .sort((left, right) => comparePinnedThreads(left, right, state.pinnedSessionOrder));

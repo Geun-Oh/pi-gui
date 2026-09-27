@@ -173,6 +173,11 @@ export function useWorkbench({ api, target }: UseWorkbenchOptions) {
     (tool: ToolRef) => dispatch({ type: "open-tool", tool }),
     [dispatch],
   );
+  /** For a result that arrives later: the task that asked may no longer be showing. */
+  const openToolFor = useCallback(
+    (ref: SessionRef, tool: ToolRef) => apply(ref, [{ type: "open-tool", tool }]),
+    [apply],
+  );
   const activateTool = useCallback(
     (toolId: string) => dispatch({ type: "activate-tool", toolId }),
     [dispatch],
@@ -254,6 +259,7 @@ export function useWorkbench({ api, target }: UseWorkbenchOptions) {
     ready: entry?.restore === "ready",
     error: entry?.error ?? "",
     openTool,
+    openToolFor,
     activateTool,
     closeTool,
     showChooser,

@@ -13,6 +13,7 @@ import type {
   TranscriptMessage,
 } from "../../contracts/desktop-state";
 import type { RunMetrics } from "./app-store-timeline";
+import type { SideChatRecord } from "../../contracts/side-chat";
 
 export interface MutableSessionExtensionUiState extends ExtensionUiState {
   readonly instanceId: string;
@@ -47,6 +48,8 @@ export class SessionStateMap {
   readonly lastInteractedAtBySession = new Map<string, string>();
   readonly pinnedAtBySession = new Map<string, string>();
   pinnedSessionOrder: string[] = [];
+  /** Persisted: side chat session key to the thread it branched from. */
+  readonly sideChatsBySession = new Map<string, SideChatRecord>();
   readonly sessionErrorsBySession = new Map<string, string>();
   readonly sessionSubscriptions = new Map<string, () => void>();
   readonly activeAssistantMessageBySession = new Map<string, string>();
@@ -92,6 +95,7 @@ export class SessionStateMap {
       this.lastViewedAtBySession,
       this.lastInteractedAtBySession,
       this.pinnedAtBySession,
+      this.sideChatsBySession,
       this.sessionErrorsBySession,
       this.sessionSubscriptions,
       this.activeAssistantMessageBySession,
@@ -139,6 +143,14 @@ export class SessionStateMap {
       this.pinnedSessionOrder = nextPinnedOrder;
       changed = true;
     }
+    // A side chat whose thread is gone has nowhere to show, so it becomes a thread.
+    for (const [key, record] of this.sideChatsBySession) {
+      const workspaceId = key.slice(0, key.lastIndexOf(":"));
+      if (!activeKeys.has(key) || !activeKeys.has(`${workspaceId}:${record.parentSessionId}`)) {
+        this.sideChatsBySession.delete(key);
+        changed = true;
+      }
+    }
     return changed;
   }
 
@@ -160,6 +172,7 @@ export class SessionStateMap {
     this.lastInteractedAtBySession.delete(key);
     this.pinnedAtBySession.delete(key);
     this.pinnedSessionOrder = this.pinnedSessionOrder.filter((entry) => entry !== key);
+    this.sideChatsBySession.delete(key);
     this.sessionErrorsBySession.delete(key);
     this.sessionCommandsBySession.delete(key);
     this.sessionUsageBySession.delete(key);

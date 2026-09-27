@@ -7,6 +7,7 @@ import type { DesktopAppState } from "../../contracts/desktop-state";
 import { sessionKey } from "@pi-gui/session-driver";
 import type { SessionDriverEvent, SessionRef } from "@pi-gui/session-driver";
 import { getSelectedSession } from "../../contracts/desktop-state";
+import { threadRefForSession } from "../../contracts/side-chat";
 import { isSessionActivelyViewed } from "../conversation/session-visibility";
 
 const MAX_COMPLETED_RUN_KEYS = 500;
@@ -192,7 +193,12 @@ export class NotificationManager {
       return true;
     }
 
-    return !isSessionActivelyViewed(this.latestState, event.sessionRef, window);
+    // A side chat is on screen with its thread's side panel.
+    return !isSessionActivelyViewed(
+      this.latestState,
+      threadRefForSession(this.latestState?.sideChatsBySession, event.sessionRef),
+      window,
+    );
   }
 
   private async reevaluateOnboardingState(syncWindow = true): Promise<void> {
@@ -327,10 +333,11 @@ export class NotificationManager {
   }
 
   private async openSession(sessionRef: SessionRef): Promise<void> {
+    const threadRef = threadRefForSession(this.latestState?.sideChatsBySession, sessionRef);
     if (this.selectSessionInWindow) {
-      await this.selectSessionInWindow(sessionRef);
+      await this.selectSessionInWindow(threadRef);
     } else {
-      await this.store.selectSession(sessionRef);
+      await this.store.selectSession(threadRef);
     }
     const window = this.getWindow();
     if (!window || window.isDestroyed()) {

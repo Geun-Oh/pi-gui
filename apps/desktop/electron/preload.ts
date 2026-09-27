@@ -27,6 +27,7 @@ import {
 } from "../contracts/ipc";
 import type { ClipboardImageRead } from "../contracts/composer-attachments";
 import type { SaveTaskWorkbenchTemplateInput, TaskWorkbenchTemplate } from "../contracts/workbench";
+import type { SendSideChatMessageInput, SideChatTranscript } from "../contracts/side-chat";
 import type {
   TurnChangesInput,
   TurnChangesResult,
@@ -513,6 +514,21 @@ contextBridge.exposeInMainWorld("piApp", {
       readonly state: DesktopAppState;
       readonly result: NavigateSessionTreeResult;
     }>,
+  openSideChat: (parent: SessionRef) =>
+    ipcRenderer.invoke(desktopIpc.openSideChat, parent) as Promise<{
+      readonly sideChat: SessionRef;
+      readonly state: DesktopAppState;
+    }>,
+  watchSideChat: (target: SessionRef) =>
+    ipcRenderer.invoke(desktopIpc.watchSideChat, target) as Promise<SideChatTranscript>,
+  unwatchSideChat: (target: SessionRef) =>
+    ipcRenderer.invoke(desktopIpc.unwatchSideChat, target) as Promise<void>,
+  sendSideChatMessage: (input: SendSideChatMessageInput) =>
+    ipcRenderer.invoke(desktopIpc.sendSideChatMessage, input) as Promise<DesktopAppState>,
+  stopSideChat: (target: SessionRef) =>
+    ipcRenderer.invoke(desktopIpc.stopSideChat, target) as Promise<DesktopAppState>,
+  onSideChatTranscriptChanged: (listener: (payload: SideChatTranscript) => void) =>
+    subscribeIpc(desktopIpc.sideChatTranscriptChanged, listener),
   listWorkspaceFiles: (workspaceId: string, options?: { readonly force?: boolean }) =>
     ipcRenderer.invoke(desktopIpc.listWorkspaceFiles, workspaceId, options) as Promise<string[]>,
   readWorkspaceFile: (workspaceId: string, filePath: string) =>

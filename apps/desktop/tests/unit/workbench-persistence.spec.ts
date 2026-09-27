@@ -33,7 +33,7 @@ function workbenchTemplate(): TaskWorkbenchTemplate {
   };
 }
 
-test("concurrent v19 saves retain exactly one immutable copy of the original v17 bytes", async () => {
+test("concurrent current-version saves retain exactly one immutable copy of the original v17 bytes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "workbench-migration-"));
   const path = join(dir, "ui-state.json");
   const original =
@@ -59,7 +59,7 @@ test("concurrent v19 saves retain exactly one immutable copy of the original v17
   expect(await readFile(migrationPath)).toEqual(Buffer.from(original));
 
   const saved = await readPersistedUiState(path);
-  expect(saved.version).toBe(19);
+  expect(saved.version).toBe(20);
   expect(saved.composerDraft).toBe(retained.composerDraft);
   expect(saved.threadGrouping).toBe(retained.threadGrouping);
   expect(saved.taskWorkbenchTemplatesBySession).toEqual(retained.taskWorkbenchTemplatesBySession);
@@ -71,7 +71,7 @@ test("concurrent v19 saves retain exactly one immutable copy of the original v17
     migrationCopies,
   );
   expect(decodePersistedUiState(JSON.parse(await readFile(`${path}.bak`, "utf8"))).version).toBe(
-    19,
+    20,
   );
 });
 
@@ -100,10 +100,10 @@ test("migrating recovered v17 state keeps its original bytes and the damaged pri
   const corruptCopies = names.filter((name) => name.startsWith("ui-state.json.corrupt."));
   expect(corruptCopies).toHaveLength(1);
   expect(await readFile(join(dir, corruptCopies[0]!))).toEqual(Buffer.from(damaged));
-  expect((await readPersistedUiState(path)).version).toBe(19);
+  expect((await readPersistedUiState(path)).version).toBe(20);
 });
 
-test("v18 layouts default to Uncommitted and retain their exact original bytes across v19 scope saves", async () => {
+test("v18 layouts default to Uncommitted and retain their exact original bytes across later scope saves", async () => {
   const dir = await mkdtemp(join(tmpdir(), "workbench-scope-migration-"));
   const path = join(dir, "ui-state.json");
   const template = workbenchTemplate();
@@ -151,7 +151,7 @@ test("v18 layouts default to Uncommitted and retain their exact original bytes a
   const migrationPath = join(dir, migrationCopies[0]!);
   expect(await readFile(migrationPath, "utf8")).toBe(original);
   const saved = await readPersistedUiState(path);
-  expect(saved.version).toBe(19);
+  expect(saved.version).toBe(20);
   expect(saved.composerDraft).toBe("retain this draft");
   expect(saved.taskWorkbenchTemplatesBySession?.["workspace-one:task-one"]?.changes).toEqual({
     ...template.changes,

@@ -1112,6 +1112,7 @@ app
         workspace: store,
         conversation: store,
         orchestration: store,
+        sideChats: store,
         scheduledTasks: store,
         settings: store,
       },

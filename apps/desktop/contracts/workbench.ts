@@ -16,7 +16,9 @@ export function isBuiltinToolKind(value: unknown): value is BuiltinToolKind {
 
 export type ToolRef =
   | { readonly kind: BuiltinToolKind }
-  | { readonly kind: "extension"; readonly extensionId: string; readonly viewId: string };
+  | { readonly kind: "extension"; readonly extensionId: string; readonly viewId: string }
+  /** One tab per side chat; the session is in the task's own workspace. */
+  | { readonly kind: "side-chat"; readonly sessionId: string };
 
 export type ToolSelection =
   { readonly kind: "chooser" } | { readonly kind: "tool"; readonly toolId: string };
@@ -53,7 +55,9 @@ export interface SaveTaskWorkbenchTemplateInput {
 export function toolRefId(tool: ToolRef): string {
   return tool.kind === "extension"
     ? JSON.stringify(["extension", tool.extensionId, tool.viewId])
-    : tool.kind;
+    : tool.kind === "side-chat"
+      ? JSON.stringify(["side-chat", tool.sessionId])
+      : tool.kind;
 }
 
 /** Shared by the disk reader and IPC boundary so neither can accept a wider schema. */
@@ -63,8 +67,9 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
   if (!Array.isArray(root.tools) || root.tools.length > MAX_WORKBENCH_TOOLS) fail("tools");
   const retired = new Set<string>();
   const tools: ToolRef[] = root.tools.flatMap((value: unknown): ToolRef[] => {
-    const tool = record(value, ["kind", "extensionId", "viewId"]);
+    const tool = record(value, ["kind", "extensionId", "viewId", "sessionId"]);
     if (tool.kind === "extension") {
+      if (tool.sessionId !== undefined) fail("extension tool fields");
       return [
         {
           kind: "extension",
@@ -73,7 +78,14 @@ export function decodeTaskWorkbenchTemplate(value: unknown): TaskWorkbenchTempla
         },
       ];
     }
-    if (tool.extensionId !== undefined || tool.viewId !== undefined) fail("builtin tool fields");
+    if (tool.kind === "side-chat") {
+      if (tool.extensionId !== undefined || tool.viewId !== undefined) {
+        fail("side chat tool fields");
+      }
+      return [{ kind: "side-chat", sessionId: text(tool.sessionId, 256) }];
+    }
+    if (tool.extensionId !== undefined || tool.viewId !== undefined || tool.sessionId !== undefined)
+      fail("builtin tool fields");
     if (RETIRED_TOOL_KINDS.includes(tool.kind)) {
       retired.add(tool.kind as string);
       return [];
