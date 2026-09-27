@@ -21,6 +21,7 @@ const FILES: Record<string, { readonly content: string; readonly keyword: string
   "App.java": { content: "public class App {\n  int count = 0;\n}\n", keyword: "public" },
   "lib.rs": { content: "pub fn answer() -> u32 {\n    42\n}\n", keyword: "fn" },
   "ci.yaml": { content: "jobs:\n  build:\n    runs-on: ubuntu-latest\n", keyword: "" },
+  "notes.txt": { content: "function is just a word in plain text\n", keyword: "" },
 };
 
 async function openFile(window: Page, path: string): Promise<void> {
@@ -82,6 +83,11 @@ test("Files tab colours Go, Terraform, Java, Rust, YAML and long files", async (
 
     await openFile(window, "ci.yaml");
     await expect(preview.locator(".hljs-attr", { hasText: "runs-on" })).toBeVisible();
+
+    // Files without a known grammar stay plain.
+    await openFile(window, "notes.txt");
+    await expect(preview).not.toHaveAttribute("data-language", /.*/);
+    await expect(preview.locator('[class*="hljs-"]')).toHaveCount(0);
 
     await openFile(window, "long.ts");
     await expect(preview).toHaveAttribute("data-language", "typescript");

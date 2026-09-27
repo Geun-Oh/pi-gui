@@ -71,7 +71,7 @@ async function launchSeeded(threadTitle: string): Promise<{
   return { harness, window, userDataDir, workspacePath };
 }
 
-test("syntax-highlights known languages and leaves unknown extensions plain", async () => {
+test("syntax-highlights known languages in review diffs, Markdown included", async () => {
   test.setTimeout(45_000);
   const { harness, window } = await launchSeeded("Review UX highlight");
   try {
@@ -107,8 +107,8 @@ test("syntax-highlights known languages and leaves unknown extensions plain", as
     const mdDiff = diffPanel
       .getByRole("region", { name: "Combined changes", exact: true })
       .locator(".diff-inline");
-    await expect(mdDiff).not.toHaveAttribute("data-language", /.*/);
-    await expect(mdDiff.locator('[class*="hljs-"]')).toHaveCount(0);
+    await expect(mdDiff).toHaveAttribute("data-language", "markdown");
+    await expect(mdDiff.locator(".hljs-section", { hasText: "# notes" })).toBeVisible();
   } finally {
     await harness.close();
   }
