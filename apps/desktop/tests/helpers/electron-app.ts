@@ -72,6 +72,8 @@ export interface DesktopHarness {
 
 export interface LaunchDesktopOptions {
   readonly initialWorkspaces?: readonly string[];
+  /** Command-line arguments after the app entry, such as folders from `pi-gui <folder>`. */
+  readonly extraArgs?: readonly string[];
   readonly notificationLogPath?: string;
   readonly testMode?: DesktopTestMode;
   readonly agentDir?: string;
@@ -160,7 +162,7 @@ export async function launchDesktop(
         }
       : {};
   const electronApp = await electron.launch({
-    args: electronCliArgs(desktopDir),
+    args: [...electronCliArgs(desktopDir), ...(normalized.extraArgs ?? [])],
     cwd: desktopDir,
     env,
     ...recordVideo,
@@ -176,11 +178,15 @@ export async function spawnDesktopProcess(
   const normalized = normalizeLaunchOptions(options);
   const agentDir = await prepareAgentDir(userDataDir, normalized);
   const env = buildDesktopLaunchEnv(userDataDir, agentDir, normalized);
-  return spawn(electronExecutablePath, electronCliArgs(desktopDir), {
-    cwd: desktopDir,
-    env,
-    stdio: "ignore",
-  });
+  return spawn(
+    electronExecutablePath,
+    [...electronCliArgs(desktopDir), ...(normalized.extraArgs ?? [])],
+    {
+      cwd: desktopDir,
+      env,
+      stdio: "ignore",
+    },
+  );
 }
 
 export async function launchPackagedDesktop(

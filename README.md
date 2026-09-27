@@ -105,6 +105,21 @@ Update with `brew upgrade --cask pi-gui`. A Homebrew upgrade may ask you to
 re-confirm macOS permissions or Dock placement. Other installs tell you when a new release is
 out and update from the Releases page.
 
+### Open a folder from the terminal
+
+On macOS, choose **Install 'pi-gui' Command in PATH…** from the app menu once. It links
+`/usr/local/bin/pi-gui` to the launcher inside the app, asking for an administrator password if
+that folder is not writable. Then:
+
+```bash
+pi-gui            # open the current directory
+pi-gui ~/src/app  # open another folder
+```
+
+The folder opens like **File → Open Folder…**, in the running app or a newly started one. The
+launcher finds `pi-gui.app` in `/Applications` or `~/Applications`; set `PI_GUI_EXECUTABLE` to use
+another build.
+
 Building from source is for contributors; see [Development](#development).
 
 ## Quickstart

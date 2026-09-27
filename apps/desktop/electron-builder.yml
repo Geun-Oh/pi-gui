@@ -26,6 +26,9 @@ files:
 extraResources:
   - from: resources/icon.png
     to: icon.png
+  # Linked into PATH by "Install 'pi-gui' Command in PATH…" (macOS app menu).
+  - from: resources/bin/pi-gui
+    to: bin/pi-gui
 
 asar: true
 asarUnpack:

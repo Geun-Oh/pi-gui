@@ -1,0 +1,71 @@
+#!/bin/sh
+# Open folders in pi-gui from a terminal.
+#
+#   pi-gui              open the current directory
+#   pi-gui <folder>...  open each folder
+#
+# A running pi-gui receives the folders through its single-instance handoff;
+# otherwise the app starts with them. Set PI_GUI_EXECUTABLE to use another build.
+set -eu
+
+case "${1:-}" in
+  -h | --help)
+    echo "Usage: pi-gui [folder ...]"
+    echo "Open the current directory, or each folder given, in pi-gui."
+    exit 0
+    ;;
+esac
+
+# Follow links such as /usr/local/bin/pi-gui back to the copy inside the app.
+script=$0
+while [ -L "$script" ]; do
+  link=$(readlink "$script")
+  case "$link" in
+    /*) script=$link ;;
+    *) script=$(dirname "$script")/$link ;;
+  esac
+done
+script_dir=$(cd "$(dirname "$script")" && pwd -P)
+
+find_executable() {
+  if [ -n "${PI_GUI_EXECUTABLE:-}" ]; then
+    echo "$PI_GUI_EXECUTABLE"
+    return 0
+  fi
+  # macOS: pi-gui.app/Contents/Resources/bin -> Contents/MacOS/pi-gui.
+  # Linux: <install>/resources/bin -> <install>/pi-gui.
+  for candidate in \
+    "$script_dir/../../MacOS/pi-gui" \
+    "$script_dir/../../pi-gui" \
+    "/Applications/pi-gui.app/Contents/MacOS/pi-gui" \
+    "$HOME/Applications/pi-gui.app/Contents/MacOS/pi-gui" \
+    "/opt/pi-gui/pi-gui"; do
+    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if [ "$#" -eq 0 ]; then
+  set -- .
+fi
+count=$#
+for folder in "$@"; do
+  if [ ! -d "$folder" ]; then
+    echo "pi-gui: $folder is not a folder" >&2
+    exit 1
+  fi
+  set -- "$@" "$(cd "$folder" && pwd -P)"
+done
+shift "$count"
+
+if ! executable=$(find_executable); then
+  echo "pi-gui: could not find pi-gui.app. Install it in /Applications or set PI_GUI_EXECUTABLE." >&2
+  exit 1
+fi
+
+# The app must start as Electron, not as the Node runtime a parent tool may request.
+unset ELECTRON_RUN_AS_NODE
+nohup "$executable" "$@" >/dev/null 2>&1 &

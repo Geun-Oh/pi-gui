@@ -43,6 +43,12 @@ import {
 import { getChangedFiles, getFileDiff, stageFile } from "./platform/files/app-store-diff";
 import { listWorkspaceFiles, readWorkspaceFile } from "./platform/files/app-store-files";
 import { resolveExistingWorkspacePath } from "./platform/files/workspace-paths";
+import {
+  launchFoldersFromArgv,
+  launchFoldersFromRequest,
+  type LaunchFolderRequest,
+} from "./platform/launch-folders";
+import { CLI_COMMAND_TARGET, cliScriptPath, installCliCommand } from "./platform/cli-command";
 import { MAIN_DEV_RELOAD_MARKER } from "./dev-reload-main-probe";
 import { NotificationManager } from "./platform/notification-manager";
 import { NotificationPermissionService } from "./platform/notification-permission";
@@ -263,6 +269,7 @@ function createTestExtensionContext(sessionRef: SessionRef): ExtensionContext {
 }
 const OPEN_FOLDER_MENU_ITEM_ID = "file.open-folder";
 const CHECK_FOR_UPDATES_MENU_ITEM_ID = "app.check-for-updates";
+const INSTALL_CLI_MENU_ITEM_ID = "app.install-cli-command";
 const QUIT_FLUSH_TIMEOUT_MS = 5_000;
 
 function getTerminalService(): TerminalService {
@@ -650,6 +657,52 @@ async function pickWorkspaceViaDialog(
   return runWindowScopedForWindow(window, () => addPickedWorkspace(window, workspacePath));
 }
 
+/** Folders from `pi-gui <folder>` open exactly like Open Folder… in the given window. */
+function openLaunchFolders(window: BrowserWindow, folders: readonly string[]): void {
+  for (const folder of folders) {
+    void runWindowScopedForWindow(window, () => addPickedWorkspace(window, folder)).catch(
+      (error: unknown) => {
+        console.error("[main] opening a launch folder failed", error);
+      },
+    );
+  }
+}
+
+async function installCliCommandFromMenu(): Promise<void> {
+  const window = mainWindow && canPublishToWindow(mainWindow) ? mainWindow : undefined;
+  const showDialog = (options: MessageBoxOptions) =>
+    window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options);
+  try {
+    await installCliCommand(
+      cliScriptPath({
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        appPath: app.getAppPath(),
+      }),
+    );
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    // Cancelling the administrator prompt is not a failure worth reporting.
+    if (detail.includes("(-128)")) return;
+    await showDialog({
+      type: "warning",
+      title: "pi-gui",
+      message: "Couldn't install the 'pi-gui' command.",
+      detail,
+      buttons: ["OK"],
+    });
+    return;
+  }
+  await showDialog({
+    type: "info",
+    title: "pi-gui",
+    message: `Installed the 'pi-gui' command at ${CLI_COMMAND_TARGET}.`,
+    detail:
+      "In a terminal, run pi-gui to open the current folder, or pi-gui <folder> to open another.",
+    buttons: ["OK"],
+  });
+}
+
 async function runManualUpdateCheck(): Promise<void> {
   const window = mainWindow && canPublishToWindow(mainWindow) ? mainWindow : undefined;
   const showDialog = (options: MessageBoxOptions) =>
@@ -722,6 +775,15 @@ function installApplicationMenu(): void {
           click: () => {
             void runManualUpdateCheck().catch((error: unknown) => {
               console.error("[main] runManualUpdateCheck failed", error);
+            });
+          },
+        },
+        {
+          id: INSTALL_CLI_MENU_ITEM_ID,
+          label: "Install 'pi-gui' Command in PATH…",
+          click: () => {
+            void installCliCommandFromMenu().catch((error: unknown) => {
+              console.error("[main] installCliCommandFromMenu failed", error);
             });
           },
         },
@@ -811,15 +873,30 @@ app.setName("pi");
 const configuredUserDataDir = process.env.PI_APP_USER_DATA_DIR?.trim() || app.getPath("userData");
 app.setPath("userData", configuredUserDataDir);
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+// `pi-gui <folder>` from a terminal (resources/bin/pi-gui) starts this binary with
+// folder arguments. A running app receives them through the single-instance
+// handoff; additionalData carries them because argv is not forwarded verbatim.
+const launchFolderRequest: LaunchFolderRequest = {
+  folders: launchFoldersFromArgv(process.argv, { cwd: process.cwd(), appPath: app.getAppPath() }),
+};
+/** Folders to open once startup has created its window; undefined after that. */
+let startupLaunchFolders: string[] | undefined = [...launchFolderRequest.folders];
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock(launchFolderRequest);
 if (!hasSingleInstanceLock) {
   // app.quit() before ready can leave a windowless macOS process alive.
   // Duplicate instances have no store or windows, so exit immediately.
   app.exit(0);
 }
 
-app.on("second-instance", () => {
-  const window = windowOwner.foreground();
+app.on("second-instance", (_event, _argv, _workingDirectory, additionalData) => {
+  const folders = launchFoldersFromRequest(additionalData);
+  if (startupLaunchFolders) {
+    // Still starting: the window does not exist yet and will open these itself.
+    startupLaunchFolders.push(...folders);
+    return;
+  }
+  const window = windowOwner.foreground() ?? (folders.length > 0 ? createAppWindow() : null);
   if (!window) {
     return;
   }
@@ -828,6 +905,7 @@ app.on("second-instance", () => {
   }
   window.show();
   window.focus();
+  openLaunchFolders(window, folders);
 });
 
 app
@@ -1112,7 +1190,10 @@ app
       },
     });
 
-    createAppWindow();
+    const initialWindow = createAppWindow();
+    const queuedLaunchFolders = startupLaunchFolders ?? [];
+    startupLaunchFolders = undefined;
+    openLaunchFolders(initialWindow, queuedLaunchFolders);
     void notificationPermissionService.getCurrentStatus().catch((error: unknown) => {
       console.error("[main] getCurrentStatus failed", error);
     });
