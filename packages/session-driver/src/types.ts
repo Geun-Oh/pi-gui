@@ -152,6 +152,11 @@ export interface ForkSessionResult {
   readonly selectedText?: string;
 }
 
+export interface CloneSessionOptions {
+  /** Title for the new session. Defaults to the source session title. */
+  readonly title?: string;
+}
+
 export interface SessionEventBase {
   readonly type: string;
   readonly sessionRef: SessionRef;
@@ -352,6 +357,11 @@ export interface SessionDriver {
   createSession(workspace: WorkspaceRef, options?: CreateSessionOptions): Promise<SessionSnapshot>;
   validateForkSession(sourceRef: SessionRef, options: ForkSessionOptions): Promise<void>;
   forkSession(sourceRef: SessionRef, options: ForkSessionOptions): Promise<ForkSessionResult>;
+  /**
+   * Copy the source's active branch, up to its current leaf, into a new session in the
+   * same workspace whose header names the source as its parent (pi's `/clone`).
+   */
+  cloneSession(sourceRef: SessionRef, options?: CloneSessionOptions): Promise<SessionSnapshot>;
   openSession(sessionRef: SessionRef): Promise<SessionSnapshot>;
   archiveSession(sessionRef: SessionRef): Promise<void>;
   unarchiveSession(sessionRef: SessionRef): Promise<void>;

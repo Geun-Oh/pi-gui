@@ -2,6 +2,7 @@ export type {
   AssistantDeltaEvent,
   AssistantMessageEndedEvent,
   AssistantMessagePersistedEvent,
+  CloneSessionOptions,
   CreateSessionOptions,
   ForkPosition,
   ForkSessionOptions,

@@ -10,6 +10,7 @@ import type {
   SessionTreeSnapshot,
 } from "@pi-gui/session-driver/types";
 import type {
+  CloneSessionOptions,
   CreateSessionOptions,
   ForkSessionOptions,
   ForkSessionResult,
@@ -64,6 +65,10 @@ export class PiSdkDriver implements SessionDriver {
 
   forkSession(sourceRef: SessionRef, options: ForkSessionOptions): Promise<ForkSessionResult> {
     return this.supervisor.forkSession(sourceRef, options);
+  }
+
+  cloneSession(sourceRef: SessionRef, options?: CloneSessionOptions): Promise<SessionSnapshot> {
+    return this.supervisor.cloneSession(sourceRef, options);
   }
 
   openSession(sessionRef: SessionRef): Promise<SessionSnapshot> {

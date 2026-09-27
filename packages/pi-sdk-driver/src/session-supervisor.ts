@@ -29,6 +29,7 @@ import type {
   CreateSessionOptions,
   ForkSessionOptions,
   ForkSessionResult,
+  CloneSessionOptions,
   HostUiRequest,
   HostUiResponse,
   SessionConfig,
@@ -791,6 +792,52 @@ export class SessionSupervisor {
       branchedManager = forked;
     }
 
+    const snapshot = await this.openBranchedSession(
+      targetWorkspace,
+      branchedManager,
+      options.title ?? sourceRecord.title,
+    );
+    return selectedText === undefined ? { snapshot } : { snapshot, selectedText };
+  }
+
+  async cloneSession(
+    sourceRef: SessionRef,
+    options: CloneSessionOptions = {},
+  ): Promise<SessionSnapshot> {
+    const sourceRecord = await this.ensureRecord(sourceRef);
+    const sourceManager = this.requireSession(sourceRecord).sessionManager;
+    const sourceFile = sourceRecord.sessionFile ?? sourceManager.getSessionFile();
+    if (!sourceFile) {
+      throw new Error(
+        `Session ${sessionKey(sourceRef)} cannot be cloned because no session file is tracked.`,
+      );
+    }
+    // Same shape as pi's /clone: fork "at" the live leaf. A partial reply still
+    // streaming is not an entry yet, so the copy ends at the last persisted one.
+    const leafId = sourceManager.getLeafId();
+    let branchedManager: SessionManager;
+    if (leafId) {
+      branchedManager = SessionManager.open(sourceFile);
+      if (!branchedManager.createBranchedSession(leafId)) {
+        throw new Error(`Failed to clone session ${sessionKey(sourceRef)}.`);
+      }
+    } else {
+      branchedManager = SessionManager.create(sourceRecord.workspace.path);
+      branchedManager.newSession({ parentSession: sourceFile });
+    }
+    return this.openBranchedSession(
+      sourceRecord.workspace,
+      branchedManager,
+      options.title ?? sourceRecord.title,
+    );
+  }
+
+  /** Start a runtime on a branched session file and track it as a new session. */
+  private async openBranchedSession(
+    targetWorkspace: WorkspaceRef,
+    branchedManager: SessionManager,
+    title: string,
+  ): Promise<SessionSnapshot> {
     const forkConfig = deriveSessionConfig(branchedManager);
     const forkProvider = forkConfig?.provider;
     const forkModelId = forkConfig?.modelId;
@@ -816,7 +863,6 @@ export class SessionSupervisor {
     const runtime = await this.createAgentSessionRuntimeImpl(createOptions);
     const session = runtime.session;
 
-    const title = options.title ?? sourceRecord.title;
     const record = this.createRecord(targetWorkspace, runtime, title);
     forcePersistPiSession(session.sessionManager);
     record.config = deriveSessionConfig(session.sessionManager);
@@ -836,7 +882,7 @@ export class SessionSupervisor {
       timestamp: nowIso(),
       snapshot,
     });
-    return selectedText === undefined ? { snapshot } : { snapshot, selectedText };
+    return snapshot;
   }
 
   private async resolveForkSource(
