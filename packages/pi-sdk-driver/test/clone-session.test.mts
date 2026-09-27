@@ -90,6 +90,14 @@ await test("cloneSession copies the active branch into a new session that names 
   assert.ok(sourceFile && cloneFile && sourceFile !== cloneFile);
   assert.equal((await readHeader(cloneFile)).parentSession, sourceFile);
   assert.equal((await readHeader(cloneFile)).id, clone.ref.sessionId);
+  // pi's session list shows the clone under its own name, not the source's.
+  const names = (await readFile(cloneFile, "utf8"))
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { type?: string; name?: string })
+    .filter((entry) => entry.type === "session_info")
+    .map((entry) => entry.name);
+  assert.equal(names.at(-1), "Side chat");
 
   // The source keeps its own leaf and history.
   const sourceTexts = (await supervisor.getTranscript(source.ref)).flatMap((item) =>

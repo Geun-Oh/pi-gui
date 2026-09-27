@@ -825,6 +825,8 @@ export class SessionSupervisor {
       branchedManager = SessionManager.create(sourceRecord.workspace.path);
       branchedManager.newSession({ parentSession: sourceFile });
     }
+    // The copied path carries the source's name; the clone's own title follows it.
+    if (options.title) branchedManager.appendSessionInfo(options.title);
     return this.openBranchedSession(
       sourceRecord.workspace,
       branchedManager,
